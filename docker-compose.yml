@@ -1,0 +1,153 @@
+version: '3.8'
+
+services:
+  maritime-detection:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: VESLINT:latest
+    container_name: veslint
+    
+    # Environment variables
+    environment:
+      - PYTHONPATH=/app
+      - LOG_LEVEL=INFO
+      - TEST_MODE=false
+    
+    # Mount volumes
+    volumes:
+      - ./data:/app/data
+      - ./plots:/app/plots
+      - ./logs:/app/logs
+      - ./config.yaml:/app/config.yaml:ro
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+          cpus: '4.0'
+        reservations:
+          memory: 4G
+          cpus: '2.0'
+    
+    # Restart policy
+    restart: unless-stopped
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "python", "-c", "from src.config import config; print('OK')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    
+    # Command override for interactive use
+    # Uncomment the next line for interactive shell
+    # command: /bin/bash
+    
+    # Port mapping (if web interface is added)
+    ports:
+      - "8000:8000"
+
+  # Optional: Add Jupyter notebook service for development
+  jupyter:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: VESLINT:latest
+    container_name: maritime-jupyter
+    
+    command: >
+      bash -c "pip install jupyter notebook &&
+               jupyter notebook --ip=0.0.0.0 --port=8888 --no-browser --allow-root
+               --NotebookApp.token='' --NotebookApp.password=''"
+    
+    ports:
+      - "8888:8888"
+    
+    volumes:
+      - ./:/app
+      - ./data:/app/data
+      - ./notebooks:/app/notebooks
+    
+    environment:
+      - JUPYTER_ENABLE_LAB=yes
+    
+    profiles:
+      - dev
+    
+    restart: unless-stopped
+
+  # Optional: PostgreSQL database for storing results
+  postgres:
+    image: postgres:13
+    container_name: maritime-postgres
+    
+    environment:
+      POSTGRES_DB: maritime_db
+      POSTGRES_USER: maritime_user
+      POSTGRES_PASSWORD: maritime_password
+    
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./sql:/docker-entrypoint-initdb.d
+    
+    ports:
+      - "5432:5432"
+    
+    profiles:
+      - database
+    
+    restart: unless-stopped
+
+  # Optional: Redis for caching
+  redis:
+    image: redis:6-alpine
+    container_name: maritime-redis
+    
+    ports:
+      - "6379:6379"
+    
+    volumes:
+      - redis_data:/data
+    
+    profiles:
+      - cache
+    
+    restart: unless-stopped
+
+  # Optional: MLflow for experiment tracking
+  mlflow:
+    image: python:3.9-slim
+    container_name: maritime-mlflow
+    
+    command: >
+      bash -c "pip install mlflow psycopg2-binary &&
+               mlflow server --host 0.0.0.0 --port 5000
+               --backend-store-uri postgresql://maritime_user:maritime_password@postgres:5432/maritime_db
+               --default-artifact-root /app/mlruns"
+    
+    ports:
+      - "5000:5000"
+    
+    volumes:
+      - ./mlruns:/app/mlruns
+    
+    depends_on:
+      - postgres
+    
+    profiles:
+      - mlflow
+    
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  default:
+    name: maritime-network

@@ -395,7 +395,7 @@ If you use this project in your research, please cite:
 ```bibtex
 @software{VESLINT,
   title={VESLINT: VEssel Surveillance & Logging INTelligence},
-  author={Oussama BEN SALEM},
+  author={VESLINT},
   year={2025},
   url={https://github.com/VESLINT/VESLINT}
 }
